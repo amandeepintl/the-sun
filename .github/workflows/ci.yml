@@ -45,6 +45,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
+          # The project itself (src layout): without this, `import the_sun`,
+          # lint-imports and `python -m the_sun` all fail in CI.
+          python -m pip install -e . --no-deps
       - name: Ruff (lint)
         run: python -m ruff check .
       - name: Ruff (format)
@@ -77,6 +80,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
+          # The project itself (src layout): without this, `import the_sun`,
+          # lint-imports and `python -m the_sun` all fail in CI.
+          python -m pip install -e . --no-deps
       - name: Pytest (unit)
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
@@ -117,6 +123,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
+          # The project itself (src layout): without this, `import the_sun`,
+          # lint-imports and `python -m the_sun` all fail in CI.
+          python -m pip install -e . --no-deps
       - name: Write the environment the suite reads
         run: |
           cat > .env <<'EOF'
