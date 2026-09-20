@@ -3,6 +3,17 @@
 .env.*
 !.env.example
 
+# Private keys and certificates - defence in depth against accidental commits
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Local databases (never contain production data, but never belong in git)
+*.db
+*.sqlite
+*.sqlite3
+
 # Virtual environments
 .venv/
 venv/
