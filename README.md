@@ -147,8 +147,9 @@ read message history, use application commands) - nothing grants moderation.
 
 ## Deployment
 
-**[DEPLOY.md](DEPLOY.md) has a step-by-step guide for hosting the bot for free**
-(Oracle Cloud Always Free, or Koyeb + Neon + Upstash without a VM).
+**[DEPLOY.md](DEPLOY.md) has a step-by-step guide for hosting the bot for free,**
+with no credit card required (Koyeb + Neon + Upstash) or on an Oracle Cloud
+Always Free VM.
 
 ### Docker Compose (PostgreSQL, Redis and the bot)
 
