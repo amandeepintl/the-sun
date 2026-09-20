@@ -9,6 +9,7 @@ import pytest
 
 from the_sun.db import create_database
 from the_sun.db.models import UsageStatus, UsageSurface
+from the_sun.repositories import UnitOfWork
 from the_sun.services import ServiceContext, UsageRecord, UsageService
 
 
@@ -120,7 +121,12 @@ async def test_recording_failures_never_break_the_caller(
         )
     )
     degraded = ServiceContext(
-        service_context.settings, database=broken_database, cache=service_context.cache
+        service_context.settings,
+        database=broken_database,
+        cache=service_context.cache,
+        # The context would otherwise borrow the test's factory, which is bound
+        # to the healthy session; route units of work at the broken engine.
+        uow_factory=lambda: UnitOfWork(broken_database.session_factory),
     )
     try:
         with caplog.at_level(logging.WARNING, logger="the_sun.services.usage_service"):

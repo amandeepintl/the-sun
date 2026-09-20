@@ -70,7 +70,9 @@ class UsageService:
             async with self._context.unit_of_work() as uow:
                 await uow.usage.append_many(payload)
         except PersistenceError as exc:
-            logger.warning("usage event could not be recorded", extra={"error": str(exc)})
+            logger.warning(
+                "usage event could not be recorded", extra={"error": str(exc)}, exc_info=exc
+            )
 
     async def summary(
         self,

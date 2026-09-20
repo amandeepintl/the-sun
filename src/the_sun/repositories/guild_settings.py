@@ -82,6 +82,10 @@ class SqlAlchemyGuildSettingsRepository(GuildSettingsRepository):
         for field, value in changes.items():
             setattr(settings, field, value)
         await self._session.flush()
+        # The flush expires ``updated_at`` (it is refreshed by the database via
+        # onupdate); reload the row so callers can read every attribute without
+        # triggering a lazy load outside the async context.
+        await self._session.refresh(settings)
         return settings
 
     async def delete(self, guild_id: int) -> bool:

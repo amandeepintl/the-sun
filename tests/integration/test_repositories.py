@@ -229,10 +229,12 @@ async def test_memory_keys_are_unique_per_scope(
         "INSERT INTO memories (id, user_id, guild_id, key, value, source)"
         " VALUES (:id, :user_id, NULL, 'language', 'German', 'explicit')"
     )
-    async with uow_factory() as uow:
-        await uow.memories.upsert(user_id=unique_id, key="language", value="French")
-        with pytest.raises(PersistenceError) as error:
+    with pytest.raises(PersistenceError) as error:
+        async with uow_factory() as uow:
+            await uow.memories.upsert(user_id=unique_id, key="language", value="French")
+            # A duplicate of the global (guild-less) row the upsert created.
             await uow.session.execute(insert, {"id": uuid.uuid4(), "user_id": unique_id})
+    # The unit of work translates the driver-level violation when the block exits.
     assert isinstance(error.value.__cause__, IntegrityError)
 
 
@@ -286,7 +288,10 @@ async def test_usage_events_aggregate_from_real_rows(
         assert {entry.command for entry in top} == {"ask", "summarize", "translate"}
         ask = next(entry for entry in top if entry.command == "ask")
         assert ask.invocations == 2
-        assert ask.failures == 1
+        assert ask.failures == 0
+        summarize = next(entry for entry in top if entry.command == "summarize")
+        assert summarize.invocations == 2
+        assert summarize.failures == 1
 
         providers = await uow.usage.provider_breakdown(guild_id=guild_id)
         assert providers[0].provider == "primary"
@@ -311,4 +316,7 @@ async def test_usage_events_aggregate_from_real_rows(
         assert len(seen) == 5
 
         cutoff = datetime.now(tz=UTC) - timedelta(seconds=1)
-        assert await uow.usage.purge_older_than(cutoff - timedelta(days=1)) == 5
+        # The purge is a plain `occurred_at < cutoff` comparison: a cutoff in
+        # the freshly inserted rows' past removes nothing, one after them all.
+        assert await uow.usage.purge_older_than(cutoff - timedelta(days=1)) == 0
+        assert await uow.usage.purge_older_than(cutoff + timedelta(days=1)) == 5

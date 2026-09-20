@@ -17,11 +17,13 @@ import uuid
 from dataclasses import dataclass
 
 from the_sun.ai import Usage
+from the_sun.ai.retry import RetryExhaustedError
 from the_sun.db.models import MessageKind, MessageRole, UsageStatus, UsageSurface
 from the_sun.errors import (
     InvalidInputError,
     PersistenceError,
     QuotaExceededError,
+    RateLimitedError,
     TheSunError,
 )
 from the_sun.logging_setup import current_correlation_id
@@ -101,9 +103,15 @@ class AIService:
                 public_message="There was nothing to ask. Provide a question or some text.",
             )
 
-        await self.rate_limiter.ensure_allowed(
-            user_id=request.user_id, guild_id=request.guild_id, settings=request.settings
-        )
+        try:
+            await self.rate_limiter.ensure_allowed(
+                user_id=request.user_id, guild_id=request.guild_id, settings=request.settings
+            )
+        except RateLimitedError:
+            # A refusal is an invocation too: record it so per-guild statistics
+            # and the daily token ledger see every request the member made.
+            await self._record(request, status=UsageStatus.RATE_LIMITED, error_code="rate_limited")
+            raise
         await self._enforce_token_allowance(request)
 
         conversation = None
@@ -151,6 +159,10 @@ class AIService:
             )
         except TheSunError as error:
             latency_ms = int((time.perf_counter() - started) * 1000)
+            # Unwrap the retry-exhausted wrapper so telemetry and callers see the
+            # real classification instead of a generic retry failure.
+            if isinstance(error, RetryExhaustedError):
+                error = error.error
             get_metrics().counter(
                 "sun_ai_requests_total", "AI requests, by command and outcome"
             ).increment(command=request.command, status="error")
@@ -160,7 +172,9 @@ class AIService:
                 error_code=type(error).__name__,
                 latency_ms=latency_ms,
             )
-            raise
+            # Surface the unwrapped error: a caller should never need to know
+            # that retries happened to see what actually went wrong.
+            raise error
 
         latency_ms = int((time.perf_counter() - started) * 1000)
         answer = AIAnswer(

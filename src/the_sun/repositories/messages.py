@@ -219,7 +219,10 @@ class SqlAlchemyMessageRepository(MessageRepository):
             .scalar_subquery()
         )
         window = func.coalesce(guild_window, default_retention_days)
-        cutoff = now - func.make_interval(days=window)
+        # make_interval's ``days`` is its fourth parameter (years, months, weeks,
+        # days); it is passed positionally because generic SQL functions do not
+        # accept keyword arguments.
+        cutoff = now - func.make_interval(0, 0, 0, window)
         result = await self._session.execute(delete(Message).where(Message.created_at < cutoff))
         return affected_rows(result)
 

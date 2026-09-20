@@ -26,7 +26,10 @@ from the_sun.db.models import Base
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers defaults to True, which would permanently mute
+    # every logger created before migrations run (all of this project's module
+    # loggers, in tests and in any process that migrates after importing).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

@@ -294,16 +294,17 @@ async def test_settings_changes_are_what_the_ai_path_enforces(
     assert view.history_length == 3
 
     _respond_with(service_context)
+    service = AIService(service_context)
+    request = AIRequest(
+        command="ask",
+        instruction="over the allowance",
+        user_id=unique_id,
+        settings=view,
+        guild_id=unique_id,
+    )
+    await service.respond(request)  # the provider reports 42 + 8 tokens
     with pytest.raises(QuotaExceededError):
-        await AIService(service_context).respond(
-            AIRequest(
-                command="ask",
-                instruction="over the allowance",
-                user_id=unique_id,
-                settings=view,
-                guild_id=unique_id,
-            )
-        )
+        await service.respond(request)
     async with service_context.unit_of_work() as uow:
         summary = await uow.usage.summary(guild_id=unique_id)
     assert summary.rate_limited == 1
@@ -407,13 +408,17 @@ async def test_a_failed_write_rolls_the_whole_unit_of_work_back(
     async with service_context.unit_of_work() as uow:
         before = await uow.usage.summary(guild_id=unique_id)
         before_turns = await uow.messages.count()
-        with pytest.raises(PersistenceError):
+
+    # The violation surfaces as PersistenceError when the unit of work exits.
+    with pytest.raises(PersistenceError):
+        async with service_context.unit_of_work() as uow:
             await uow.messages.append(
                 conversation_id=uuid.uuid4(),  # no such conversation
                 role=MessageRole.USER,
                 kind=MessageKind.CHAT,
                 content="never stored",
             )
+
     async with service_context.unit_of_work() as uow:
         after = await uow.usage.summary(guild_id=unique_id)
         turns = await uow.messages.count()
