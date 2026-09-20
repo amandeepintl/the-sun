@@ -147,6 +147,9 @@ read message history, use application commands) - nothing grants moderation.
 
 ## Deployment
 
+**[DEPLOY.md](DEPLOY.md) has a step-by-step guide for hosting the bot for free**
+(Oracle Cloud Always Free, or Koyeb + Neon + Upstash without a VM).
+
 ### Docker Compose (PostgreSQL, Redis and the bot)
 
 ```bash
@@ -154,6 +157,14 @@ cp .env.example .env      # fill in DISCORD_TOKEN, AI_PROVIDERS, DEFAULT_PROVIDE
 docker compose up --build -d
 docker compose logs -f bot
 docker compose run --rm bot doctor
+```
+
+For internet-facing hosts, use `docker-compose.prod.yml` instead: it publishes
+no database or cache ports, requires strong service passwords, binds the health
+endpoint to loopback, and adds log rotation and memory limits.
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 Compose supplies the container-internal `DATABASE_URL` and `REDIS_URL` from its own
