@@ -68,7 +68,13 @@ def test_test_database_prefers_the_dedicated_variable() -> None:
     assert without_override.test_database().url == without_override.database.url
 
 
-def test_missing_required_variables_are_reported_by_environment_name() -> None:
+def test_missing_required_variables_are_reported_by_environment_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # CI exports these variables for the integration job, so the test must
+    # remove them to see the "everything missing" error it is asserting on.
+    for variable in ("DISCORD_TOKEN", "DATABASE_URL", "REDIS_URL", "AI_PROVIDERS"):
+        monkeypatch.delenv(variable, raising=False)
     with pytest.raises(PydanticValidationError) as error:
         Settings(_env_file=None)
     reported = {str(entry["loc"][0]) for entry in error.value.errors()}

@@ -53,7 +53,12 @@ class Conversation(TimestampMixin, Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_activity_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        # Wall clock per INSERT, so a conversation created in the same
+        # transaction as its first turns still sorts after older ones.
+        default=func.clock_timestamp(),
+        server_default=func.now(),
     )
 
     messages: Mapped[list[Message]] = relationship(

@@ -55,7 +55,12 @@ class UsageEvent(Base):
     correlation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     occurred_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        # Wall clock per INSERT: now() would give every event in one
+        # transaction the same timestamp and blur their ordering.
+        default=func.clock_timestamp(),
+        server_default=func.now(),
     )
 
     __table_args__ = (
