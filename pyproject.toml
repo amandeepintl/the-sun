@@ -1,0 +1,165 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "the-sun"
+version = "0.1.0"
+description = "The Sun - a production Discord AI assistant backed by real AI providers"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "aiohttp>=3.10",
+    "discord.py>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "redis>=5.2",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "httpx>=0.28",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "import-linter>=2.1",
+]
+
+[project.scripts]
+the-sun = "the_sun.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+the_sun = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "A",
+    "C4",
+    "DTZ",
+    "T20",
+    "RET",
+    "SIM",
+    "PTH",
+    "RUF",
+]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["T20"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/the_sun", "tests"]
+mypy_path = "src"
+explicit_package_bases = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+check_untyped_defs = true
+strict_equality = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers"
+markers = [
+    "unit: no external services required",
+    "integration: requires real Postgres and real Redis (never faked)",
+    "live: requires real Discord and a real AI provider",
+]
+
+[tool.importlinter]
+root_package = "the_sun"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "config depends on nothing inside the package"
+type = "forbidden"
+source_modules = ["the_sun.config"]
+forbidden_modules = [
+    "the_sun.ai",
+    "the_sun.cache",
+    "the_sun.db",
+    "the_sun.integrations",
+    "the_sun.observability",
+    "the_sun.repositories",
+    "the_sun.services",
+]
+
+[[tool.importlinter.contracts]]
+name = "db and repositories stay below the cache, ai and service layers"
+type = "forbidden"
+source_modules = ["the_sun.db", "the_sun.repositories"]
+forbidden_modules = [
+    "the_sun.ai",
+    "the_sun.cache",
+    "the_sun.integrations",
+    "the_sun.services",
+    "the_sun.observability",
+]
+
+[[tool.importlinter.contracts]]
+name = "cache and ai do not reach into persistence or services"
+type = "forbidden"
+source_modules = ["the_sun.cache", "the_sun.ai"]
+forbidden_modules = ["the_sun.db", "the_sun.repositories", "the_sun.services", "the_sun.cogs"]
+
+[[tool.importlinter.contracts]]
+name = "services are the only layer allowed to combine everything"
+type = "forbidden"
+source_modules = ["the_sun.ai", "the_sun.cache", "the_sun.db", "the_sun.repositories"]
+forbidden_modules = ["the_sun.bot", "the_sun.cogs"]
+
+[[tool.importlinter.contracts]]
+name = "the discord gateway client lives only in the presentation layer"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "the_sun.ai",
+    "the_sun.cache",
+    "the_sun.config",
+    "the_sun.db",
+    "the_sun.repositories",
+    "the_sun.services",
+]
+forbidden_modules = ["discord"]
+
+[[tool.importlinter.contracts]]
+name = "redis is only touched by the cache layer"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "the_sun.ai",
+    "the_sun.config",
+    "the_sun.db",
+    "the_sun.integrations",
+    "the_sun.observability",
+    "the_sun.repositories",
+    "the_sun.services",
+]
+forbidden_modules = ["redis"]

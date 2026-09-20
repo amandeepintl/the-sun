@@ -1,0 +1,21 @@
+# Never send local state, secrets or caches into a build context.
+.git
+.gitignore
+.github
+.env
+.env.*
+!.env.example
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.import_linter_cache
+tests
+docs
+*.md
+!README.md
+Dockerfile
+docker-compose.yml
+*.log

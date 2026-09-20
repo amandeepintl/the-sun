@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.14"
+  # Values used by the integration job. They are not secrets: the Discord token is
+  # never accepted by a real Discord API call in tests, and the provider is a
+  # non-resolvable host that the suite only reaches through transport doubles.
+  DISCORD_TOKEN: ci-not-a-real-token
+  AI_PROVIDERS: >-
+    {"ci":{"type":"openai_compatible","base_url":"https://provider.invalid/v1","default_model":"ci-model"}}
+  DEFAULT_PROVIDER: ci
+
+jobs:
+  static-checks:
+    name: lint, types and layering
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+      - name: Ruff (lint)
+        run: python -m ruff check .
+      - name: Ruff (format)
+        run: python -m ruff format --check .
+      - name: Mypy
+        run: python -m mypy
+      - name: Import contracts
+        run: lint-imports
+      - name: Configuration validation
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          REDIS_URL: redis://localhost:6379/0
+        run: python -m the_sun check-config
+      - name: Migration SQL renders
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          REDIS_URL: redis://localhost:6379/0
+        run: alembic upgrade head --sql > /tmp/migration.sql && tail -5 /tmp/migration.sql
+
+  unit-tests:
+    name: unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+      - name: Pytest (unit)
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          REDIS_URL: redis://localhost:6379/0
+        run: python -m pytest -m unit -q
+
+  integration-tests:
+    name: integration tests (real PostgreSQL and Redis)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: thesun_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d thesun_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+      - name: Write the environment the suite reads
+        run: |
+          cat > .env <<'EOF'
+          DISCORD_TOKEN=ci-not-a-real-token
+          DATABASE_URL=postgresql+asyncpg://ci:ci@127.0.0.1:5432/thesun_ci
+          REDIS_URL=redis://127.0.0.1:6379/0
+          AI_PROVIDERS={"ci":{"type":"openai_compatible","base_url":"https://provider.invalid/v1","default_model":"ci-model"}}
+          DEFAULT_PROVIDER=ci
+          LOG_JSON=true
+          EOF
+      - name: Apply migrations
+        run: python -m the_sun migrate
+      - name: Pytest (integration)
+        run: python -m pytest -m integration -q
+      - name: Doctor (database and cache only)
+        run: python -m the_sun doctor --json --skip-discord

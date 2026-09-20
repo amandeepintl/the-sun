@@ -1,0 +1,87 @@
+# Local and small-deployment stack: PostgreSQL, Redis and the bot.
+#
+# Application secrets and AI providers come from `.env` (gitignored). The
+# container URLs are supplied here because inside the network the services are
+# reached by service name, not localhost; override them with
+# CONTAINER_DATABASE_URL / CONTAINER_REDIS_URL when you point the bot at a managed
+# database or a hosted Redis instead.
+#
+#   docker compose up --build -d
+#   docker compose logs -f bot
+#   docker compose run --rm bot doctor      # real checks against all dependencies
+#   docker compose run --rm bot check-config
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-thesun}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-thesun}
+      POSTGRES_DB: ${POSTGRES_DB:-thesun}
+      # A stronger password hashing cost is unnecessary for a small deployment.
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thesun} -d ${POSTGRES_DB:-thesun}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      # Exposed for local tooling (psql, alembic --sql); remove in production.
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --save
+      - "60"
+      - "1"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Container-internal endpoints. Both can be overridden from the shell or
+      # from `.env` without editing this file.
+      DATABASE_URL: ${CONTAINER_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-thesun}:${POSTGRES_PASSWORD:-thesun}@postgres:5432/${POSTGRES_DB:-thesun}}
+      REDIS_URL: ${CONTAINER_REDIS_URL:-redis://redis:6379/0}
+      # The health endpoint is the container's own health check, so it is on by
+      # default here and bound to the container interface rather than loopback.
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      HEALTH_HOST: 0.0.0.0
+      HEALTH_PORT: 8080
+      APP_ENV: ${APP_ENV:-production}
+      LOG_JSON: "true"
+      # Run `docker compose exec bot python -m the_sun migrate` if you would rather
+      # migrate by hand; leaving this true keeps schema and code in step.
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+    ports:
+      - "${HEALTH_PORT:-8080}:8080"
+    stop_grace_period: 30s
+
+volumes:
+  postgres-data:
+  redis-data:
