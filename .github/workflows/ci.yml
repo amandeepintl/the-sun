@@ -141,4 +141,4 @@ jobs:
       - name: Pytest (integration)
         run: python -m pytest -m integration -q
       - name: Doctor (database and cache only)
-        run: python -m the_sun doctor --json --skip-discord
+        run: python -m the_sun doctor --json --skip-discord --skip-providers

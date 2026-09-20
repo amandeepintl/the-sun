@@ -85,6 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip the Discord identity check",
     )
     doctor.add_argument(
+        "--skip-providers",
+        action="store_true",
+        help="skip the live model-catalogue checks against each AI provider",
+    )
+    doctor.add_argument(
         "--metrics",
         action="store_true",
         help="also print the metrics gathered during the run",
@@ -131,10 +136,14 @@ def _run_check_config(settings: Settings, *, as_json: bool) -> int:
     return EXIT_OK if not problems else EXIT_CONFIG_ERROR
 
 
-async def _run_doctor(settings: Settings, *, as_json: bool, skip_discord: bool) -> int:
+async def _run_doctor(
+    settings: Settings, *, as_json: bool, skip_discord: bool, skip_providers: bool
+) -> int:
     context = build_service_context(settings)
     try:
-        report: HealthReport = await HealthService(context).run(include_discord=not skip_discord)
+        report: HealthReport = await HealthService(context).run(
+            include_discord=not skip_discord, include_providers=not skip_providers
+        )
         payload = report.to_dict()
         if as_json:
             _print_json(payload)
@@ -228,7 +237,12 @@ def main(argv: list[str] | None = None) -> int:
             if not arguments.json:
                 require_valid_settings(settings)
             exit_code = asyncio.run(
-                _run_doctor(settings, as_json=arguments.json, skip_discord=arguments.skip_discord)
+                _run_doctor(
+                    settings,
+                    as_json=arguments.json,
+                    skip_discord=arguments.skip_discord,
+                    skip_providers=arguments.skip_providers,
+                )
             )
             if arguments.metrics and not arguments.json:
                 _render_metrics()

@@ -191,12 +191,15 @@ class HealthService:
             )
         )
 
-    async def run(self, *, include_discord: bool = True) -> HealthReport:
+    async def run(
+        self, *, include_discord: bool = True, include_providers: bool = True
+    ) -> HealthReport:
         """Run every check and return the combined report."""
         checks: list[CheckResult] = [self.check_config()]
         checks.append(await self.check_database())
         checks.append(await self.check_cache())
-        checks.extend(await self.check_providers())
+        if include_providers:
+            checks.extend(await self.check_providers())
         if include_discord:
             checks.append(await self.check_discord())
         return HealthReport(checks=checks)

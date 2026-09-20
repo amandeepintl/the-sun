@@ -85,6 +85,17 @@ def test_doctor_reports_failing_dependencies(
     assert payload["checks"][0]["ok"] is True
 
 
+def test_doctor_can_skip_provider_checks(
+    isolated_environment: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = main(["doctor", "--json", "--skip-discord", "--skip-providers"])
+    assert exit_code == EXIT_CHECK_FAILED  # database and cache are still down
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert "provider:primary" not in payload["failures"]
+    assert not any(check["name"].startswith("provider:") for check in payload["checks"])
+
+
 def test_help_exits_cleanly() -> None:
     with pytest.raises(SystemExit) as error:
         main(["--help"])
